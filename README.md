@@ -1,39 +1,44 @@
-Sovereign SaaS OS
+<div align="center">
 
-A production architecture for running modern SaaS on open infrastructure without making your application dependent on a single cloud provider.
+🛡️ Sovereign SaaS OS
 
-Sovereign SaaS OS is an open playbook for building a portable, recoverable, AI-ready SaaS platform using Kubernetes, PostgreSQL, S3-compatible object storage, GitOps, and independently verifiable disaster recovery.
+A production-grade, open-source architecture for building SaaS without surrendering your infrastructure.
 
-The reference implementation runs on Hetzner Cloud + dedicated servers, but Hetzner is deliberately treated as an implementation detail—not an application dependency.
+Portable infrastructure · Independent recovery · Machine-verifiable failure contracts
+
+<br />
 
 Compute is disposable. State is recoverable. Recovery is independently verifiable.
 
-Read the full Sovereign SaaS Playbook →
+<br />
+
+📖 Read the Playbook · 🧭 Architecture · 🚀 How to Use It · 🧪 Certification
+
+</div>
 
 ⸻
 
-Why This Exists
+Why this exists
 
-There are two common ways to build SaaS infrastructure.
+Modern SaaS infrastructure tends to drift toward one of two extremes.
 
-At one extreme, you assemble open-source tools yourself and end up with a platform that works until a node fails, a database corrupts, a secret leaks, or the person who built it leaves.
+On one side, you get a pile of self-hosted open-source tools that technically works — until a node dies, a backup is corrupt, a secret leaks, or the one person who understands the cluster disappears.
 
-At the other extreme, you compose dozens of proprietary managed cloud services and gain operational convenience at the cost of increasing infrastructure cost, architectural coupling, and migration difficulty.
+On the other, you get a deeply integrated cloud architecture built from proprietary managed services that is operationally convenient but expensive, difficult to leave, and increasingly coupled to one provider.
 
-Sovereign SaaS OS explores a third path.
+Sovereign SaaS OS is an attempt at a third path.
 
-Use mature open-source infrastructure, but apply the same operational discipline expected from serious managed platforms:
+It combines open infrastructure with the operational discipline expected from serious production systems:
 
-* explicit failure models;
-* defined RPO and RTO targets;
-* immutable and independently stored backups;
-* declarative infrastructure;
-* GitOps;
-* least-privilege secrets;
 * deterministic rebuilds;
-* destructive recovery tests;
-* portable application interfaces;
-* cross-provider disaster recovery.
+* explicit RPO and RTO targets;
+* independent backups;
+* GitOps;
+* immutable infrastructure;
+* least-privilege credentials;
+* provider-independent recovery;
+* destructive failure testing;
+* portable application contracts.
 
 The goal is not to self-host everything.
 
@@ -41,308 +46,377 @@ The goal is to maintain credible exit paths.
 
 ⸻
 
-What “Sovereign” Means
+What does “sovereign” mean?
 
 Sovereignty does not mean having no vendors.
 
-It means your system can be:
+It means vendors remain replaceable implementations, rather than becoming part of your application architecture.
 
-rebuilt, recovered, verified, and relocated without requiring the continued cooperation of a single infrastructure provider.
+A sovereign system should be able to:
 
-An application built on Sovereign SaaS OS talks to portable interfaces:
+rebuild, recover, verify, and relocate without requiring the continued cooperation of a single infrastructure provider.
+
+The application relies on portable interfaces:
 
 HTTP
 PostgreSQL
 S3-compatible object storage
 Redis
 Kubernetes
-environment-based configuration
+Environment-based configuration
 
-It should not care whether the underlying implementation is Hetzner today, another Kubernetes environment tomorrow, or something else several years from now.
+Hetzner is the reference infrastructure provider.
+
+It is not supposed to become part of the product’s domain model.
 
 ⸻
 
-The Five Invariants
+🧭 The Five Invariants
 
-Every design decision in the playbook is evaluated against five requirements.
+Every architectural decision in Sovereign SaaS OS is evaluated against five rules.
 
-1. Rebuildability
-
-Compute is ephemeral.
-
-A destroyed environment should be reconstructible from:
-
-Terraform
-+ Talos configuration
-+ Git
-+ bootstrap secrets
-+ durable state
-
-2. Recoverability
-
-Every stateful component has a defined:
-
-failure mode
-recovery mechanism
-RPO
-RTO
-certification test
+Invariant	Meaning
+🔁 Rebuildability	Compute can disappear. Git + secrets + durable state can recreate it.
+🧯 Recoverability	Every stateful system has an explicit RPO, RTO, recovery mechanism, and restore test.
+📦 Portability	Application code does not depend on Hetzner-specific APIs or proprietary infrastructure.
+🛠️ Operability	Bootstrap, recovery, upgrades, and rotation are encoded instead of living in someone’s head.
+🌍 Independence	Recovery must survive failure of the provider, account, or system being recovered.
 
 A backup that has never been restored is not considered verified.
 
-3. Portability
+⸻
 
-Application code remains independent of Hetzner-specific APIs and infrastructure primitives.
+🏗️ Architecture
 
-Infrastructure may change substantially without requiring the application architecture or data model to be redesigned.
+                               INTERNET
+                                   │
+                                   ▼
+                           Hetzner Load Balancer
+                                   │
+                                   ▼
+                              Cilium Gateway
+                                   │
+                     ┌─────────────┴─────────────┐
+                     │                           │
+                     ▼                           ▼
+                  Next.js                    Node API
+                 stateless                  stateless
+                     │                           │
+                     └──────────────┬────────────┘
+                                    │
+                         Auth / Authorization
+                           Tenant Context
+                             Rate Limits
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              │                     │                     │
+              ▼                     ▼                     ▼
+          PgBouncer              Redis                  MinIO
+          CNPG Pooler          disposable             distributed
+              │                                         EC:2
+              ▼                                           │
+         PostgreSQL                                       │
+        3 instances                                       │
+              │                                           ▼
+              │                                 Immutable Snapshots
+              ▼                                         Tier 2
+     Hetzner Object Storage                               │
+       Base Backup + WAL                                  │
+              │                                           │
+              └────────────────────┬──────────────────────┘
+                                   ▼
+                          Independent Provider
+                           e.g. Backblaze B2
+                                Tier 3
+                         COMPLIANCE retention
 
-4. Operability
+Reference stack
 
-Bootstrap, failover, recovery, upgrades, secret rotation, and disaster recovery should be encoded as repeatable procedures rather than tribal knowledge.
-
-5. Independence
-
-A recovery mechanism cannot depend solely on the thing it exists to recover.
-
-For example:
-
-PostgreSQL in Kubernetes
-        ↓
-backup outside Kubernetes
-MinIO on Hetzner
-        ↓
-immutable recovery copy outside MinIO
-Hetzner recovery storage
-        ↓
-independent Tier-3 provider
+Layer	Technology
+Host OS	Talos Linux
+Kubernetes	Upstream Kubernetes
+Networking	Cilium
+GitOps	Argo CD
+Database	PostgreSQL + CloudNativePG
+Vector search	pgvector
+Pooling	PgBouncer
+Cache	Redis
+Object storage	MinIO
+Authentication	Better Auth
+Frontend	Next.js
+API	Node.js
+Metrics	Prometheus
+Dashboards	Grafana
+Logs	Loki
+Tracing	OpenTelemetry / Tempo
+Tier-2 backup	Hetzner Object Storage
+Tier-3 recovery	Independent S3 provider
 
 ⸻
 
-Architecture
+🔐 Recovery is part of the architecture
 
-The reference architecture looks roughly like this:
+Most infrastructure diagrams stop at production state.
 
-                         INTERNET
-                             │
-                             ▼
-                    Hetzner Load Balancer
-                             │
-                             ▼
-                       Cilium Gateway
-                             │
-               ┌─────────────┴─────────────┐
-               │                           │
-               ▼                           ▼
-            Next.js                    Node API
-           stateless                  stateless
-               │                           │
-               └─────────────┬─────────────┘
-                             │
-                  Auth / Authorization
-                     Tenant Context
-                       Rate Limits
-                             │
-            ┌────────────────┼────────────────┐
-            │                │                │
-            ▼                ▼                ▼
-        PgBouncer          Redis            MinIO
-        CNPG Pooler      disposable       distributed
-            │                               EC:2
-            ▼                                 │
-       PostgreSQL                              │
-      3 instances                              │
-            │                                  ▼
-            │                        Immutable Snapshots
-            ▼                              Tier-2
-   Hetzner Object Storage                      │
-     Base Backup + WAL                         │
-            │                                  │
-            └────────────────┬─────────────────┘
-                             ▼
-                   Independent Provider
-                    e.g. Backblaze B2
-                         Tier-3
-                   COMPLIANCE retention
-
-The Kubernetes substrate uses:
-
-Talos Linux
-upstream Kubernetes
-Cilium
-Argo CD
-CloudNativePG
-MinIO
-Prometheus
-Grafana
-Loki
-OpenTelemetry / Tempo
-
-The example application stack uses:
-
-Next.js
-Node.js
-Better Auth
-PostgreSQL + pgvector
-Redis
-S3-compatible object storage
-
-The principles do not require that exact application stack.
-
-⸻
-
-The Important Difference: Recovery Is Part of the Architecture
-
-Most architecture diagrams stop here:
+This project does not.
 
 Application
-    ↓
-Database
-    ↓
-Storage
-
-Sovereign SaaS OS keeps going:
-
-Application
-    ↓
+    │
+    ▼
 Primary State
-    ↓
+    │
+    ▼
 External Recovery State
-    ↓
+    │
+    ▼
 Independent Recovery State
-    ↓
+    │
+    ▼
 Verified Restore
 
-For PostgreSQL:
+PostgreSQL
 
-CNPG PostgreSQL
-      │
-      ├── base backups
-      └── WAL archive
-              │
-              ▼
-     Hetzner Object Storage
-              │
-              ▼
-       Independent Tier-3
+PostgreSQL
+    │
+    ├── Base backups
+    └── WAL archive
+            │
+            ▼
+   Hetzner Object Storage
+            │
+            ▼
+     Independent Tier 3
 
-For application objects:
+Object storage
 
 MinIO
   │
-  ├── local erasure coding
-  ├── local version history
+  ├── Erasure coding
+  ├── Local version history
   │
   ▼
-immutable point-in-time snapshots
+Immutable point-in-time snapshots
   │
   ▼
 Hetzner Object Storage
   │
   ▼
-independent compliance-locked Tier-3
-
-These are deliberately different mechanisms.
+Independent compliance-locked Tier 3
 
 Replication copies state. Versioning preserves history inside a storage system. Backup preserves independently recoverable states.
 
 ⸻
 
-Machine-Verifiable Failure Contracts
+🧪 Failure contracts, not hope
 
-This project does not define reliability as “the YAML looks correct.”
+The project is designed around deliberate destructive testing.
 
-It defines expected behavior and then deliberately causes failures to see whether the system behaves that way.
+Instead of asking:
 
-Examples include:
+“Does the architecture look highly available?”
+
+we ask:
+
+“What happens when we actually break it?”
+
+Examples:
 
 Kill the PostgreSQL primary
-→ Did the synchronous transaction survive?
+→ Did the acknowledged transaction survive?
 Destroy the PostgreSQL cluster
-→ Can PITR reconstruct it from external WAL?
+→ Can PITR rebuild it from external WAL?
 Lose one MinIO node
-→ Can the system still read and write?
+→ Do reads and writes continue?
 Lose two MinIO nodes
-→ Does the documented quorum behavior occur?
-Kill a snapshot halfway through
+→ Does the expected quorum behavior occur?
+Kill a snapshot job halfway through
 → Is the incomplete recovery point rejected?
-Remove Hetzner recovery credentials
-→ Can the system restore entirely from Tier-3?
-Kill an API pod during traffic
-→ Do in-flight requests drain safely?
+Remove all Hetzner recovery credentials
+→ Can Tier 3 still reconstruct the system?
+Kill an API pod during active requests
+→ Do requests drain correctly?
 Make PostgreSQL unreachable
-→ Does readiness fail without causing a restart storm?
+→ Does readiness fail without a restart storm?
 Attempt cross-tenant access
-→ Do both application authorization and PostgreSQL RLS deny it?
+→ Do both application authorization and RLS reject it?
 
-The intended result is not merely infrastructure-as-code.
+The end goal is not merely Infrastructure as Code.
 
-It is failure behavior as code.
+It is:
 
-⸻
-
-Who This Is For
-
-Sovereign SaaS OS is aimed at:
-
-Technical founders building SaaS products who want serious infrastructure without immediately adopting a large hyperscaler footprint.
-
-Small platform and engineering teams that want Kubernetes and open-source infrastructure but need a disciplined production operating model.
-
-AI SaaS teams running PostgreSQL/pgvector, object storage, queues, APIs, RAG workloads, or background processing.
-
-Organizations concerned about cloud concentration risk and wanting a realistic path to move infrastructure later.
-
-Engineers who want to own their architecture without pretending operations are easy.
-
-It is probably not the right starting point if you:
-
-* have a tiny application that is well served by a PaaS;
-* do not need Kubernetes;
-* do not have the capability to operate stateful infrastructure;
-* would prefer to outsource database, object-storage, and cluster operations entirely;
-* value minimum operational responsibility above infrastructure control.
-
-Sovereignty has an operational cost. The point of this architecture is to make that cost explicit and manageable, not pretend it does not exist.
+Failure behavior as code.
 
 ⸻
 
-Why Hetzner?
+👥 Who this is for
 
-Hetzner is the reference implementation because it provides an attractive combination of:
+This project is aimed at:
 
-cloud VMs
-dedicated servers
-private networking
-load balancing
-S3-compatible object storage
-strong price/performance
+Technical founders
 
-But the architecture intentionally limits how much Hetzner leaks upward into the application.
+Building serious SaaS products who want more control than a PaaS without immediately committing to a hyperscaler-heavy architecture.
 
-The long-term portability objective is:
+Small platform teams
 
-Application portability       Very High
-Kubernetes workload portability High
-Platform-service portability    Moderate–High
-Infrastructure-code portability Lower
+Teams comfortable operating Kubernetes, PostgreSQL, and object storage who want a disciplined production baseline.
 
-Moving providers can require substantial infrastructure work.
+AI SaaS builders
+
+Especially systems using:
+
+PostgreSQL
+pgvector
+RAG
+object storage
+background jobs
+APIs
+AI pipelines
+
+Organizations concerned about cloud concentration
+
+Teams that want an actual provider-exit strategy rather than a diagram labelled “multi-cloud.”
+
+Engineers who want infrastructure ownership
+
+Without pretending that self-hosting magically removes operational complexity.
+
+⸻
+
+Who this is probably not for
+
+Sovereign SaaS OS may be unnecessary if:
+
+* your application is comfortably served by Vercel, Render, Railway, Fly.io, Supabase, or another PaaS;
+* you don’t need Kubernetes;
+* your team doesn’t want to operate stateful infrastructure;
+* minimizing operational responsibility matters more than portability;
+* your current scale does not justify this complexity.
+
+Sovereignty has a cost.
+
+This project is about making that cost explicit, structured, and testable.
+
+⸻
+
+🇩🇪 Why Hetzner?
+
+Hetzner is the reference implementation because it offers a strong combination of:
+
+* inexpensive cloud VMs;
+* high-performance dedicated servers;
+* private networking;
+* load balancers;
+* S3-compatible object storage;
+* excellent price/performance.
+
+But the architecture deliberately limits how far Hetzner reaches into the application.
+
+The portability goal is roughly:
+
+Layer	Portability
+Application code	🟢 Very high
+Kubernetes workloads	🟢 High
+Platform services	🟡 Moderate–high
+Terraform / infrastructure implementation	🟠 Provider-specific
+
+Moving clouds may require significant infrastructure work.
 
 It should not require rewriting the product.
 
 ⸻
 
-Repository Status
+🚀 How to use this project
 
-The repository currently contains the canonical architecture and operating playbook.
+1. Read the canonical playbook
 
-The next phase is turning those contracts into a complete reference implementation.
+Start here:
 
-Planned implementation structure:
+→ Sovereign SaaS Playbook
+
+It contains the complete architecture, reasoning, failure models, recovery contracts, and certification philosophy.
+
+⸻
+
+2. Understand the invariants before copying YAML
+
+This is not intended to be a bag of Helm charts.
+
+The components are replaceable.
+
+The contracts are the important part.
+
+You can substitute:
+
+Hetzner       → another provider
+MinIO         → another S3-compatible store
+Better Auth   → another auth system
+Next.js       → another frontend
+Node.js       → another API runtime
+
+The five invariants should remain intact.
+
+⸻
+
+3. Build the reference implementation
+
+The planned bootstrap flow is:
+
+Terraform
+    │
+    ▼
+Talos
+    │
+    ▼
+Kubernetes
+    │
+    ▼
+Cilium + HCCM
+    │
+    ▼
+Argo CD
+    │
+    ▼
+Operators
+    │
+    ▼
+PostgreSQL
+    │
+    ▼
+MinIO
+    │
+    ▼
+Recovery pipelines
+    │
+    ▼
+Applications
+    │
+    ▼
+Certification
+
+The eventual developer experience is intended to look roughly like:
+
+make bootstrap
+make certify
+make certify-database
+make certify-storage
+make certify-app
+make restore-tier2
+make restore-tier3
+make destroy-staging
+make rebuild-staging
+
+⸻
+
+📁 Repository structure
+
+Today, this repository contains the canonical specification.
+
+The reference implementation will evolve toward:
 
 .
 ├── README.md
 ├── Sovereign_SaaS_Playbook.md
+├── LICENSE
 ├── Makefile
 │
 ├── terraform/
@@ -391,245 +465,186 @@ Planned implementation structure:
 
 ⸻
 
-How to Use This Repository
+✅ Canonical vs. Certified
 
-If You’re Evaluating the Architecture
+These terms have specific meanings in this project.
 
-Start with this README, then read:
-
-The Sovereign SaaS Playbook
-
-The playbook contains the complete rationale, failure models, recovery architecture, component responsibilities, bootstrap ordering, and certification model.
-
-Do not start by copying individual YAML fragments.
-
-Start by understanding the invariants and failure boundaries.
-
-If You’re Building a New SaaS Platform
-
-Use the playbook as an architecture baseline.
-
-Decide which contracts apply to your workload, then substitute implementation details where appropriate.
-
-For example:
-
-Hetzner       → another infrastructure provider
-MinIO         → another S3-compatible object system
-Better Auth   → another authentication system
-Next.js       → another frontend/runtime
-Node.js       → another API runtime
-
-The five sovereign invariants should survive those substitutions.
-
-If You’re Implementing the Reference Architecture
-
-The intended bootstrap path is:
-
-Terraform
-    ↓
-Talos
-    ↓
-Kubernetes
-    ↓
-Cilium + HCCM
-    ↓
-Argo CD
-    ↓
-Operators
-    ↓
-PostgreSQL
-    ↓
-MinIO
-    ↓
-Recovery pipelines
-    ↓
-Application
-    ↓
-Certification
-
-The future goal is to reduce this to commands such as:
-
-make bootstrap
-make certify
-make restore-tier2
-make restore-tier3
-make rebuild-staging
-
-⸻
-
-Canonical vs. Certified
-
-These words have specific meanings in this project.
-
-Canonical
-The architecture or contract has been approved.
-
-Certification-ready
-Executable tests exist for the contract.
-
-Certified
-Those tests have actually passed against a specific deployed environment and version set.
-
-Continuously certified
-The tests are repeated on a defined schedule and their results are retained.
+Status	Meaning
+Canonical	The architecture or contract has been approved.
+Certification-ready	Executable tests exist.
+Certified	Those tests passed against an actual deployed environment.
+Continuously certified	Certification is repeated on schedule and results are retained.
 
 A YAML file existing in Git does not make infrastructure certified.
 
 ⸻
 
-Production Readiness Philosophy
+🩺 Production readiness
 
-A healthy production system is not merely one that is currently serving HTTP requests.
+A system isn’t healthy simply because it returns HTTP 200.
 
 Production readiness includes:
 
-application healthy
-database healthy
-replication healthy
+Application healthy
+Database healthy
+Synchronous replication healthy
 WAL archive current
-object recovery point current
-Tier-3 copy current
-secrets manageable
-network policy validated
-restore procedures tested
-failure contracts passing
+Object snapshot current
+Tier-3 recovery copy current
+Secrets manageable
+Network policy validated
+Restore procedures tested
+Failure contracts passing
 
-A system whose application is online but whose recovery chain is broken is degraded.
-
-⸻
-
-Design Principles
-
-A few rules appear repeatedly throughout the playbook:
-
-Git defines desired state.
-Manual production changes are exceptions to be reconciled, not permanent configuration.
-
-State lives outside compute.
-Servers and clusters may disappear.
-
-Backups must cross failure domains.
-A backup inside the system being backed up is insufficient.
-
-Restore is the real backup test.
-Successful backup jobs do not prove recoverability.
-
-Applications use portable protocols.
-Cloud-specific APIs stay at the infrastructure boundary.
-
-Scaling must respect downstream capacity.
-Ten more API pods should not accidentally create ten times as many PostgreSQL connections.
-
-Health probes have distinct meanings.
-Dependency failure should not create Kubernetes restart storms.
-
-Failure tests are first-class artifacts.
-Recovery assumptions should be machine-verifiable.
+If production is serving traffic but its recovery chain is broken, the system is degraded.
 
 ⸻
 
-Roadmap
+🧠 Design principles
 
-The architecture is complete at the specification level.
+Git defines desired state
+
+Manual production changes are exceptions, not permanent configuration.
+
+Compute is replaceable
+
+Servers and Kubernetes clusters are not authoritative state.
+
+Backups cross failure domains
+
+A backup inside the thing being backed up is not enough.
+
+Restore is the real backup test
+
+A successful backup job proves that a backup job ran.
+
+It does not prove recovery.
+
+Application interfaces stay portable
+
+Provider-specific APIs stop at the infrastructure boundary.
+
+Scaling respects downstream systems
+
+Ten more API pods should not accidentally create ten times more database connections.
+
+Health checks have different meanings
+
+Readiness, liveness, and startup are separate contracts.
+
+Failure tests are first-class artifacts
+
+Recovery assumptions should be executable.
+
+⸻
+
+🗺️ Roadmap
+
+The architectural specification is complete.
 
 The next milestones are implementation:
 
-* Terraform reference implementation for the Hetzner substrate;
-* Talos machine configuration generation;
-* Argo CD bootstrap;
-* CloudNativePG + Barman recovery implementation;
-* MinIO distributed deployment;
-* immutable object snapshot pipeline;
-* Tier-3 independent recovery;
-* application runtime manifests;
-* certification harness;
-* bootstrap orchestrator;
-* version-pinned sovereign-toolkit container;
-* full staging destruction/rebuild test;
-* provider-loss recovery test.
+* Terraform reference implementation
+* Hetzner Cloud + vSwitch networking
+* Talos machine configuration generation
+* Cilium + HCCM bootstrap
+* Argo CD GitOps bootstrap
+* CloudNativePG + Barman recovery
+* MinIO distributed storage
+* Immutable object snapshot pipeline
+* Tier-3 provider-independent recovery
+* Application runtime manifests
+* Certification harness
+* Bootstrap orchestrator
+* Version-pinned sovereign-toolkit image
+* Full staging destruction / rebuild
+* Complete provider-loss recovery drill
 
-The reference implementation will evolve.
+The implementation will evolve.
 
-The five invariants should remain stable.
-
-⸻
-
-Contributing
-
-Contributions are welcome, particularly where they improve:
-
-recoverability
-portability
-failure testing
-operational simplicity
-security boundaries
-provider independence
-documentation
-
-A proposed infrastructure change should answer:
-
-1. What failure does this protect against?
-2. What new dependency does it introduce?
-3. How is recovery performed?
-4. How is the claim tested?
-5. Does it weaken any of the five sovereign invariants?
-
-Tool substitutions are welcome when they improve the contract rather than merely increase the number of tools in the stack.
+The invariants should remain stable.
 
 ⸻
 
-Project Philosophy
+🤝 Contributing
 
-This project is deliberately skeptical of architecture that exists only on diagrams.
+Contributions are welcome.
 
-The central operating rule is:
+Especially useful contributions improve:
 
-Never trust architecture because the YAML looks correct. Trust only failure behavior you have deliberately induced, observed, measured, and successfully recovered from.
+* recoverability;
+* portability;
+* failure testing;
+* security boundaries;
+* operational simplicity;
+* documentation;
+* provider independence.
 
-Git defines desired state.
+Before proposing a new component, ask:
 
-Backups define durable state.
+1. What failure does this solve?
+2. What dependency does it introduce?
+3. How is the system recovered when it fails?
+4. How is that claim tested?
+5. Does it weaken any sovereign invariant?
 
-Independent recovery protects sovereignty.
-
-Certification proves the difference.
+This project deliberately avoids tool accumulation for its own sake.
 
 ⸻
 
-Read the Full Playbook
+📖 Read the full playbook
 
-→ Sovereign SaaS Playbook — Canonical Architecture
+The complete specification is here:
 
-The playbook covers the complete system, including:
+→ The Sovereign SaaS Playbook
 
-* physical and Kubernetes topology;
-* Talos and Hetzner networking;
+It covers:
+
+* Hetzner Cloud + dedicated topology;
+* Talos Linux;
+* Kubernetes;
+* Cilium networking;
 * GitOps;
 * secrets management;
-* PostgreSQL/CNPG;
+* PostgreSQL and CloudNativePG;
 * pgvector;
 * PgBouncer;
-* database PITR;
+* PITR and WAL recovery;
 * Redis;
 * Better Auth;
-* tenant isolation and RLS;
+* multi-tenant RLS;
 * MinIO erasure coding;
-* immutable object snapshots;
-* Tier-2 and Tier-3 recovery;
+* immutable snapshots;
+* Tier-2 Object Lock;
+* Tier-3 independent recovery;
 * Next.js and Node.js runtime behavior;
 * progressive delivery;
 * autoscaling;
 * observability;
-* capacity testing;
+* chaos testing;
+* RPO/RTO contracts;
 * disaster recovery;
-* certification protocols;
-* upgrade policy;
-* sovereignty testing.
+* certification.
 
 ⸻
 
-License
+📜 License
 
-A project license has not yet been specified.
+Sovereign SaaS OS is released under the MIT License.
 
-Before accepting external contributions or encouraging production redistribution, add an explicit LICENSE file and update this section accordingly.
+See LICENSE.
+
+⸻
+
+<div align="center">
+
+Sovereignty is not the absence of dependencies.
+
+It is the maintained ability to leave them.
+
+<br />
+
+Never trust architecture because the YAML looks correct.
+Trust the failures you have deliberately induced, measured, and successfully recovered from.
+
+</div>
